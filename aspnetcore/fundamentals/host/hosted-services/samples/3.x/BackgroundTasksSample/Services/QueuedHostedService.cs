@@ -11,8 +11,7 @@ namespace BackgroundTasksSample.Services
     {
         private readonly ILogger<QueuedHostedService> _logger;
 
-        public QueuedHostedService(IBackgroundTaskQueue taskQueue, 
-            ILogger<QueuedHostedService> logger)
+        public QueuedHostedService(IBackgroundTaskQueue taskQueue, ILogger<QueuedHostedService> logger)
         {
             TaskQueue = taskQueue;
             _logger = logger;
@@ -34,18 +33,32 @@ namespace BackgroundTasksSample.Services
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var workItem = 
-                    await TaskQueue.DequeueAsync(stoppingToken);
+                var workItem = await TaskQueue.DequeueAsync(stoppingToken);
 
                 try
                 {
-                    await workItem(stoppingToken);
+                    ProcessItemAsync(workItem, stoppingToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, 
                         "Error occurred executing {WorkItem}.", nameof(workItem));
                 }
+            }
+        }
+
+        private async Task ProcessItemAsync(QueueItem item, CancellationToken stoppingToken)
+        {
+            using (_logger.BeginScope(item))
+            {
+                _logger.LogInformation("Process item start!");
+                const int iterations = 3;
+                for (var i = 0; i < iterations; i++)
+                {
+                    await Task.Delay(1000, stoppingToken);
+                    _logger.LogInformation("Process {i}/{iterations}", i + 1, iterations);
+                }
+                _logger.LogInformation("Process item finished!");
             }
         }
 
