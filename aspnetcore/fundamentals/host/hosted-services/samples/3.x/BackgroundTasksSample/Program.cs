@@ -18,14 +18,14 @@ namespace BackgroundTasksSample
                     services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
                     #endregion
 
-                    #region snippet1
-                    services.AddHostedService<TimedHostedService>();
-                    #endregion
+                    //#region snippet1
+                    //services.AddHostedService<TimedHostedService>();
+                    //#endregion
 
-                    #region snippet2
-                    services.AddHostedService<ConsumeScopedServiceHostedService>();
-                    services.AddScoped<IScopedProcessingService, ScopedProcessingService>();
-                    #endregion
+                    //#region snippet2
+                    //services.AddHostedService<ConsumeScopedServiceHostedService>();
+                    //services.AddScoped<IScopedProcessingService, ScopedProcessingService>();
+                    //#endregion
                 })
                 .Build())
             {
