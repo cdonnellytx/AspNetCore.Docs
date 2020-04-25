@@ -12,20 +12,10 @@ namespace BackgroundTasksSample
             using (var host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices((hostContext, services) =>
                 {
-                    #region snippet3
                     services.AddSingleton<MonitorLoop>();
                     services.AddHostedService<QueuedHostedService>();
                     services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
-                    #endregion
 
-                    #region snippet1
-                    services.AddHostedService<TimedHostedService>();
-                    #endregion
-
-                    #region snippet2
-                    services.AddHostedService<ConsumeScopedServiceHostedService>();
-                    services.AddScoped<IScopedProcessingService, ScopedProcessingService>();
-                    #endregion
                 })
                 .Build())
             {

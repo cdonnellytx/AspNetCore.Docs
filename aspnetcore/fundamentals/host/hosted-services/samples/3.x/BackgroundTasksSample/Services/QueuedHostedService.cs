@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
@@ -6,12 +8,15 @@ using Microsoft.Extensions.Logging;
 
 namespace BackgroundTasksSample.Services
 {
-    #region snippet1
     public class QueuedHostedService : BackgroundService
     {
         private readonly ILogger<QueuedHostedService> _logger;
 
-        public QueuedHostedService(IBackgroundTaskQueue taskQueue, 
+        private readonly List<Task> _activeWorkItems = new List<Task>();
+        private readonly SemaphoreSlim _signal = new SemaphoreSlim(1);
+        private const int ConcurrentProcessingLimit = 10; //TODO: Set this from a config file or something
+
+        public QueuedHostedService(IBackgroundTaskQueue taskQueue,
             ILogger<QueuedHostedService> logger)
         {
             TaskQueue = taskQueue;
@@ -32,19 +37,63 @@ namespace BackgroundTasksSample.Services
 
         private async Task BackgroundProcessing(CancellationToken stoppingToken)
         {
+            var queueingTask = Task.Run(async () => await ContinualQueueingToActiveTasks(stoppingToken), stoppingToken);
+            var processingTask = Task.Run(async () => await ProcessQueueItemsAsync(stoppingToken), stoppingToken);
+
+            await Task.WhenAny(queueingTask, processingTask);
+        }
+
+        private async Task ContinualQueueingToActiveTasks(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("Getting into the dequeing loop.");
             while (!stoppingToken.IsCancellationRequested)
             {
-                var workItem = 
-                    await TaskQueue.DequeueAsync(stoppingToken);
-
-                try
+                if (!await TaskQueue.HasPendingQueueItemsAsync(stoppingToken))
                 {
-                    await workItem(stoppingToken);
+                    _logger.LogInformation("QUEUE EMPTY. Hit W to queue a task.");
+                    await Task.Delay(1000, stoppingToken);
+                    continue;
                 }
-                catch (Exception ex)
+                await _signal.WaitAsync(stoppingToken);
+                var toAdd = ConcurrentProcessingLimit - _activeWorkItems.Count;
+                _logger.LogInformation("ADDING {toAdd} items to add to the active queue.", toAdd);
+                if (toAdd > 0)
                 {
-                    _logger.LogError(ex, 
-                        "Error occurred executing {WorkItem}.", nameof(workItem));
+                    for (var i = 0; i < toAdd; i++)
+                    {
+                        _activeWorkItems.Add(Task.Run(async () =>
+                        {
+                            var workItem = await TaskQueue.DequeueAsync(stoppingToken);
+                            if (workItem == null) { return; } //There's a race condition here if we queue things up too fast I don't want to dig into right now
+                            await workItem(stoppingToken);
+                        }, stoppingToken));
+                    }
+                }
+
+                _signal.Release();
+                await Task.Delay(1000, stoppingToken);
+            }
+        }
+
+        private async Task ProcessQueueItemsAsync(CancellationToken stoppingToken)
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                var copyOfActiveTasks = _activeWorkItems.ToArray();
+                if (!copyOfActiveTasks.Any())
+                {
+                    _logger.LogInformation("PROCESSOR EMPTY, skipping for 1 second.");
+                    await Task.Delay(1000, stoppingToken);
+                    continue;
+                }
+                _logger.LogInformation("PROCESSING a total of {totalTasks}", copyOfActiveTasks.Length);
+                var taskToRemove = await Task.WhenAny(copyOfActiveTasks);
+                if (taskToRemove.IsCompleted)
+                {
+                    _logger.LogInformation("REMOVING task.");
+                    await _signal.WaitAsync(stoppingToken);
+                    _activeWorkItems.Remove(taskToRemove);
+                    _signal.Release();
                 }
             }
         }
@@ -56,5 +105,4 @@ namespace BackgroundTasksSample.Services
             await base.StopAsync(stoppingToken);
         }
     }
-    #endregion
 }
