@@ -61,12 +61,12 @@ namespace BackgroundTasksSample.Services
                 {
                     for (var i = 0; i < toAdd; i++)
                     {
-                        _activeWorkItems.Add(Task.Run(async () =>
+                        var workItem = TaskQueue.TryDequeue(stoppingToken);
+                        if (workItem == null)
                         {
-                            var workItem = await TaskQueue.DequeueAsync(stoppingToken);
-                            if (workItem == null) { return; } //There's a race condition here if we queue things up too fast I don't want to dig into right now
-                            await workItem(stoppingToken);
-                        }, stoppingToken));
+                            break;
+                        }
+                        _activeWorkItems.Add(workItem(stoppingToken));
                     }
                 }
 

@@ -12,6 +12,8 @@ namespace BackgroundTasksSample.Services
 
         Task<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken);
         Task<bool> HasPendingQueueItemsAsync(CancellationToken cancellationToken);
+
+        Func<CancellationToken, Task> TryDequeue(CancellationToken cancellationToken);
     }
 
     public class BackgroundTaskQueue : IBackgroundTaskQueue
@@ -36,6 +38,12 @@ namespace BackgroundTasksSample.Services
 
             _workItems.Enqueue(workItem);
             _signal.Release();
+        }
+
+        public Func<CancellationToken, Task> TryDequeue(CancellationToken cancellationToken)
+        {
+            _workItems.TryDequeue(out var workItem);
+            return workItem;
         }
 
         public async Task<Func<CancellationToken, Task>> DequeueAsync(
